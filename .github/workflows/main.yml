@@ -1,0 +1,46 @@
+name: Build APK
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: 'stable'
+      - name: Unzip app code
+        run: unzip -q silolink_flutter_app.zip
+      - name: Create native scaffold
+        run: flutter create --platforms=android --org com.silolink --project-name silolink_app scaffold
+      - name: Add android folder
+        run: cp -r scaffold/android silolink_app/android
+      - name: Fill in Firebase config
+        run: |
+          cat > silolink_app/lib/firebase_options.dart << 'EOF'
+          import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+          class DefaultFirebaseOptions {
+            static FirebaseOptions get currentPlatform => android;
+            static const FirebaseOptions android = FirebaseOptions(
+              apiKey: 'AIzaSyD_X33l4igxIWyvyX0QirvGN3221cSwzOc',
+              appId: '1:254026128719:android:ad4ac1884744210cd9f93a',
+              messagingSenderId: '254026128719',
+              projectId: 'silolink',
+              storageBucket: 'silolink.firebasestorage.app',
+            );
+          }
+          EOF
+      - name: Get packages
+        working-directory: silolink_app
+        run: flutter pub get
+      - name: Build APK
+        working-directory: silolink_app
+        run: flutter build apk --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: silolink-apk
+          path: silolink_app/build/app/outputs/flutter-apk/app-release.apk
