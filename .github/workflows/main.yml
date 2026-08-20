@@ -34,6 +34,22 @@ jobs:
             );
           }
           EOF
+      - name: Remove Paystack dependency
+        run: sed -i '/paystack_sdk_flutter/d' silolink_app/pubspec.yaml
+      - name: Stub out Paystack service
+        run: |
+          cat > silolink_app/lib/services/paystack_service.dart << 'EOF'
+          class PaystackService {
+            Future<void> initialize(String publicKey) async {}
+            Future<String?> chargeCard({
+              required String email,
+              required double amountNaira,
+              required String reference,
+            }) async {
+              return null;
+            }
+          }
+          EOF
       - name: Get packages
         working-directory: silolink_app
         run: flutter pub get
