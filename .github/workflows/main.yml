@@ -19,6 +19,18 @@ jobs:
         run: flutter create --platforms=android --org com.silolink --project-name silolink_app scaffold
       - name: Add android folder
         run: cp -r scaffold/android silolink_app/android
+      - name: Patch Android SDK versions
+        run: |
+          cat >> silolink_app/android/build.gradle << 'EOF'
+
+          allprojects {
+              ext {
+                  compileSdkVersion = 35
+                  targetSdkVersion = 34
+                  minSdkVersion = 21
+              }
+          }
+          EOF
       - name: Fill in Firebase config
         run: |
           cat > silolink_app/lib/firebase_options.dart << 'EOF'
