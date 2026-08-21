@@ -18,6 +18,8 @@ jobs:
         run: flutter create --platforms=android --org com.silolink --project-name silolink_app scaffold
       - name: Add android folder
         run: cp -r scaffold/android silolink_app/android
+      - name: Strip spaces from phone number input
+        run: sed -i "s/var digits = _phoneController.text.trim();/var digits = _phoneController.text.trim().replaceAll(' ', '');/" silolink_app/lib/screens/auth/phone_entry_screen.dart
       - name: Fix booking provider stream type
         run: sed -i 's/Stream driverLocationStream/Stream<DocumentSnapshot<Map<String, dynamic>>> driverLocationStream/' silolink_app/lib/providers/booking_provider.dart
       - name: Add missing Firestore import
