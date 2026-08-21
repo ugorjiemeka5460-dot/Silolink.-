@@ -172,42 +172,85 @@ jobs:
           EOF
       - name: Add skip sign-in button to role screen
         run: |
-          python3 - << 'PYEOF'
-          path = "silolink_app/lib/screens/auth/role_selection_screen.dart"
-          content = open(path).read()
-          content = content.replace(
-              "import 'phone_entry_screen.dart';",
-              "import 'phone_entry_screen.dart';\nimport 'package:provider/provider.dart';\nimport '../../providers/auth_provider.dart';\nimport '../farmer/farmer_home_screen.dart';"
-          )
-          content = content.replace(
-              "            ],\n          ),\n        ),\n      ),\n    );\n  }\n\n  void _goToPhoneEntry",
-              """              const SizedBox(height: 24),
-              Center(
-                child: TextButton(
-                  onPressed: () async {
-                    final auth = context.read<AuthProvider>();
-                    final ok = await auth.testSignIn("Test Farmer", UserRole.farmer);
-                    if (ok && context.mounted) {
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (_) => const FarmerHomeScreen()),
-                        (route) => false,
-                      );
-                    }
-                  },
-                  child: const Text("Just testing? Skip sign-in"),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+          cat > silolink_app/lib/screens/auth/role_selection_screen.dart << 'EOF'
+          import 'package:flutter/material.dart';
+          import 'package:provider/provider.dart';
+          import '../../providers/auth_provider.dart';
+          import '../../utils/constants.dart';
+          import '../../widgets/role_card.dart';
+          import '../farmer/farmer_home_screen.dart';
+          import 'phone_entry_screen.dart';
 
-  void _goToPhoneEntry"""
-          )
-          open(path, "w").write(content)
-          PYEOF
+          class RoleSelectionScreen extends StatelessWidget {
+            const RoleSelectionScreen({super.key});
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                body: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 24),
+                        Text("Welcome to ${AppConstants.appName}", style: Theme.of(context).textTheme.titleLarge),
+                        const SizedBox(height: 8),
+                        const Text(
+                          "How will you be using the app?",
+                          style: TextStyle(color: Colors.black54, fontSize: 15),
+                        ),
+                        const SizedBox(height: 28),
+                        RoleCard(
+                          title: "I'm a Farmer",
+                          subtitle: "Post produce, find buyers, book a truck",
+                          icon: Icons.agriculture,
+                          onTap: () => _goToPhoneEntry(context, UserRole.farmer),
+                        ),
+                        const SizedBox(height: 12),
+                        RoleCard(
+                          title: "I'm a Buyer",
+                          subtitle: "Browse produce, order, pay, and track delivery",
+                          icon: Icons.storefront,
+                          onTap: () => _goToPhoneEntry(context, UserRole.buyer),
+                        ),
+                        const SizedBox(height: 12),
+                        RoleCard(
+                          title: "I'm a Truck Driver",
+                          subtitle: "Accept bookings and earn from deliveries",
+                          icon: Icons.local_shipping,
+                          onTap: () => _goToPhoneEntry(context, UserRole.driver),
+                        ),
+                        const SizedBox(height: 24),
+                        Center(
+                          child: TextButton(
+                            onPressed: () async {
+                              final auth = context.read<AuthProvider>();
+                              final ok = await auth.testSignIn("Test Farmer", UserRole.farmer);
+                              if (ok && context.mounted) {
+                                Navigator.of(context).pushAndRemoveUntil(
+                                  MaterialPageRoute(builder: (_) => const FarmerHomeScreen()),
+                                  (route) => false,
+                                );
+                              }
+                            },
+                            child: const Text("Just testing? Skip sign-in"),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            void _goToPhoneEntry(BuildContext context, UserRole role) {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => PhoneEntryScreen(role: role)),
+              );
+            }
+          }
+          EOF
       - name: Fill in Firebase config
         run: |
           cat > silolink_app/lib/firebase_options.dart << 'EOF'
