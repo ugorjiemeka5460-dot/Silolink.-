@@ -20,6 +20,8 @@ jobs:
         run: cp -r scaffold/android silolink_app/android
       - name: Fix booking provider stream type
         run: sed -i 's/Stream driverLocationStream/Stream<DocumentSnapshot<Map<String, dynamic>>> driverLocationStream/' silolink_app/lib/providers/booking_provider.dart
+      - name: Add missing Firestore import
+        run: sed -i "1i import 'package:cloud_firestore/cloud_firestore.dart';" silolink_app/lib/providers/booking_provider.dart
       - name: Fill in Firebase config
         run: |
           cat > silolink_app/lib/firebase_options.dart << 'EOF'
