@@ -24,6 +24,133 @@ jobs:
         run: sed -i 's/Stream driverLocationStream/Stream<DocumentSnapshot<Map<String, dynamic>>> driverLocationStream/' silolink_app/lib/providers/booking_provider.dart
       - name: Add missing Firestore import
         run: sed -i "1i import 'package:cloud_firestore/cloud_firestore.dart';" silolink_app/lib/providers/booking_provider.dart
+      - name: Add timeout and error visibility to auth
+        run: |
+          cat > silolink_app/lib/providers/auth_provider.dart << 'EOF'
+          import 'package:firebase_auth/firebase_auth.dart';
+          import 'package:flutter/foundation.dart';
+          import '../models/user_model.dart';
+          import '../services/auth_service.dart';
+          import '../services/firestore_service.dart';
+          import '../utils/constants.dart';
+
+          class AuthProvider extends ChangeNotifier {
+            final AuthService _authService = AuthService();
+            final FirestoreService _firestoreService = FirestoreService();
+
+            AppUser? currentAppUser;
+            User? firebaseUser;
+            String? verificationId;
+            bool isLoading = false;
+            String? errorMessage;
+
+            AuthProvider() {
+              _authService.authStateChanges.listen((user) async {
+                firebaseUser = user;
+                if (user != null) {
+                  currentAppUser = await _firestoreService.getUser(user.uid);
+                } else {
+                  currentAppUser = null;
+                }
+                notifyListeners();
+              });
+            }
+
+            bool get isLoggedIn => firebaseUser != null;
+            bool get hasProfile => currentAppUser != null;
+
+            Future<void> sendOtp(String phoneNumber) async {
+              isLoading = true;
+              errorMessage = null;
+              notifyListeners();
+
+              try {
+                await _authService.sendOtp(
+                  phoneNumber: phoneNumber,
+                  onCodeSent: (id) {
+                    verificationId = id;
+                    isLoading = false;
+                    notifyListeners();
+                  },
+                  onError: (msg) {
+                    errorMessage = msg;
+                    isLoading = false;
+                    notifyListeners();
+                  },
+                  onAutoVerified: (credential) {
+                    isLoading = false;
+                    notifyListeners();
+                  },
+                ).timeout(const Duration(seconds: 15));
+              } catch (e) {
+                errorMessage = "Timed out or failed: $e";
+                isLoading = false;
+                notifyListeners();
+              }
+            }
+
+            Future<bool> verifyOtpAndCreateProfile({
+              required String smsCode,
+              required String name,
+              required UserRole role,
+            }) async {
+              if (verificationId == null) {
+                errorMessage = "Please request a code first.";
+                notifyListeners();
+                return false;
+              }
+              isLoading = true;
+              errorMessage = null;
+              notifyListeners();
+
+              try {
+                final result = await _authService.verifyOtp(
+                  verificationId: verificationId!,
+                  smsCode: smsCode,
+                ).timeout(const Duration(seconds: 15));
+                final uid = result.user!.uid;
+                final phone = result.user!.phoneNumber ?? "";
+
+                final existing = await _firestoreService.getUser(uid)
+                    .timeout(const Duration(seconds: 15));
+                if (existing == null) {
+                  final newUser = AppUser(uid: uid, name: name, phone: phone, role: role);
+                  await _firestoreService.createOrUpdateUser(newUser)
+                      .timeout(const Duration(seconds: 15));
+                  currentAppUser = newUser;
+                } else {
+                  currentAppUser = existing;
+                }
+                isLoading = false;
+                notifyListeners();
+                return true;
+              } on FirebaseAuthException catch (e) {
+                errorMessage = e.message ?? "Invalid code. Please try again.";
+                isLoading = false;
+                notifyListeners();
+                return false;
+              } catch (e) {
+                errorMessage = "Timed out or failed: $e";
+                isLoading = false;
+                notifyListeners();
+                return false;
+              }
+            }
+
+            Future<void> refreshProfile() async {
+              if (firebaseUser == null) return;
+              currentAppUser = await _firestoreService.getUser(firebaseUser!.uid);
+              notifyListeners();
+            }
+
+            Future<void> signOut() async {
+              await _authService.signOut();
+              currentAppUser = null;
+              firebaseUser = null;
+              notifyListeners();
+            }
+          }
+          EOF
       - name: Fill in Firebase config
         run: |
           cat > silolink_app/lib/firebase_options.dart << 'EOF'
