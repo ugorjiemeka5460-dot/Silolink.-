@@ -63,3 +63,6 @@ jobs:
         with:
           name: silolink-apk
           path: silolink_app/build/app/outputs/flutter-apk/app-release.apk
+      - name: Print SHA-1 fingerprint
+        working-directory: silolink_app/android
+        run: ./gradlew signingReport
