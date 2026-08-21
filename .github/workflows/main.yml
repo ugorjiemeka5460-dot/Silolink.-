@@ -18,6 +18,8 @@ jobs:
         run: flutter create --platforms=android --org com.silolink --project-name silolink_app scaffold
       - name: Add android folder
         run: cp -r scaffold/android silolink_app/android
+      - name: Fix booking provider stream type
+        run: sed -i 's/Stream driverLocationStream/Stream<DocumentSnapshot<Map<String, dynamic>>> driverLocationStream/' silolink_app/lib/providers/booking_provider.dart
       - name: Fill in Firebase config
         run: |
           cat > silolink_app/lib/firebase_options.dart << 'EOF'
