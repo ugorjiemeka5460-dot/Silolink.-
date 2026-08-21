@@ -63,7 +63,6 @@ jobs:
               isLoading = true;
               errorMessage = null;
               notifyListeners();
-
               try {
                 await _authService.sendOtp(
                   phoneNumber: phoneNumber,
@@ -102,7 +101,6 @@ jobs:
               isLoading = true;
               errorMessage = null;
               notifyListeners();
-
               try {
                 final result = await _authService.verifyOtp(
                   verificationId: verificationId!,
@@ -110,7 +108,6 @@ jobs:
                 ).timeout(const Duration(seconds: 15));
                 final uid = result.user!.uid;
                 final phone = result.user!.phoneNumber ?? "";
-
                 final existing = await _firestoreService.getUser(uid)
                     .timeout(const Duration(seconds: 15));
                 if (existing == null) {
@@ -137,6 +134,28 @@ jobs:
               }
             }
 
+            Future<bool> testSignIn(String name, UserRole role) async {
+              isLoading = true;
+              errorMessage = null;
+              notifyListeners();
+              try {
+                final cred = await FirebaseAuth.instance.signInAnonymously()
+                    .timeout(const Duration(seconds: 15));
+                final uid = cred.user!.uid;
+                final newUser = AppUser(uid: uid, name: name, phone: "test", role: role);
+                await _firestoreService.createOrUpdateUser(newUser);
+                currentAppUser = newUser;
+                isLoading = false;
+                notifyListeners();
+                return true;
+              } catch (e) {
+                errorMessage = "Test sign-in failed: $e";
+                isLoading = false;
+                notifyListeners();
+                return false;
+              }
+            }
+
             Future<void> refreshProfile() async {
               if (firebaseUser == null) return;
               currentAppUser = await _firestoreService.getUser(firebaseUser!.uid);
@@ -151,6 +170,44 @@ jobs:
             }
           }
           EOF
+      - name: Add skip sign-in button to role screen
+        run: |
+          python3 - << 'PYEOF'
+          path = "silolink_app/lib/screens/auth/role_selection_screen.dart"
+          content = open(path).read()
+          content = content.replace(
+              "import 'phone_entry_screen.dart';",
+              "import 'phone_entry_screen.dart';\nimport 'package:provider/provider.dart';\nimport '../../providers/auth_provider.dart';\nimport '../farmer/farmer_home_screen.dart';"
+          )
+          content = content.replace(
+              "            ],\n          ),\n        ),\n      ),\n    );\n  }\n\n  void _goToPhoneEntry",
+              """              const SizedBox(height: 24),
+              Center(
+                child: TextButton(
+                  onPressed: () async {
+                    final auth = context.read<AuthProvider>();
+                    final ok = await auth.testSignIn("Test Farmer", UserRole.farmer);
+                    if (ok && context.mounted) {
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const FarmerHomeScreen()),
+                        (route) => false,
+                      );
+                    }
+                  },
+                  child: const Text("Just testing? Skip sign-in"),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _goToPhoneEntry"""
+          )
+          open(path, "w").write(content)
+          PYEOF
       - name: Fill in Firebase config
         run: |
           cat > silolink_app/lib/firebase_options.dart << 'EOF'
