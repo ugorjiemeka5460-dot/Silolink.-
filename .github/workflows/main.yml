@@ -24,6 +24,207 @@ jobs:
         run: sed -i 's/Stream driverLocationStream/Stream<DocumentSnapshot<Map<String, dynamic>>> driverLocationStream/' silolink_app/lib/providers/booking_provider.dart
       - name: Add missing Firestore import
         run: sed -i "1i import 'package:cloud_firestore/cloud_firestore.dart';" silolink_app/lib/providers/booking_provider.dart
+      - name: Fix Firestore composite index queries
+        run: |
+          cat > silolink_app/lib/services/firestore_service.dart << 'EOF'
+          import 'package:cloud_firestore/cloud_firestore.dart';
+          import '../models/user_model.dart';
+          import '../models/produce_model.dart';
+          import '../models/order_model.dart';
+          import '../models/booking_model.dart';
+          import '../utils/constants.dart';
+
+          class FirestoreService {
+            final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+            Future<void> createOrUpdateUser(AppUser user) {
+              return _db.collection(AppConstants.usersCollection).doc(user.uid).set(
+                    user.toMap(),
+                    SetOptions(merge: true),
+                  );
+            }
+
+            Future<AppUser?> getUser(String uid) async {
+              final doc = await _db.collection(AppConstants.usersCollection).doc(uid).get();
+              if (!doc.exists) return null;
+              return AppUser.fromMap(uid, doc.data()!);
+            }
+
+            Stream<AppUser?> streamUser(String uid) {
+              return _db.collection(AppConstants.usersCollection).doc(uid).snapshots().map(
+                    (doc) => doc.exists ? AppUser.fromMap(uid, doc.data()!) : null,
+                  );
+            }
+
+            Future<String> addProduce(Produce produce) async {
+              final ref = await _db.collection(AppConstants.produceCollection).add(produce.toMap());
+              return ref.id;
+            }
+
+            Stream<List<Produce>> streamAvailableProduce({String? cropFilter}) {
+              return _db
+                  .collection(AppConstants.produceCollection)
+                  .where('status', isEqualTo: 'available')
+                  .snapshots()
+                  .map((snap) {
+                var items = snap.docs.map((d) => Produce.fromDoc(d)).toList();
+                items.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+                if (cropFilter != null && cropFilter.trim().isNotEmpty) {
+                  final q = cropFilter.toLowerCase();
+                  items = items.where((p) => p.crop.toLowerCase().contains(q)).toList();
+                }
+                return items;
+              });
+            }
+
+            Stream<List<Produce>> streamFarmerProduce(String farmerId) {
+              return _db
+                  .collection(AppConstants.produceCollection)
+                  .where('farmerId', isEqualTo: farmerId)
+                  .snapshots()
+                  .map((snap) {
+                var items = snap.docs.map((d) => Produce.fromDoc(d)).toList();
+                items.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+                return items;
+              });
+            }
+
+            Future<void> markProduceSold(String produceId) {
+              return _db.collection(AppConstants.produceCollection).doc(produceId).update({'status': 'sold'});
+            }
+
+            Future<String> createOrder(OrderModel order) async {
+              final ref = await _db.collection(AppConstants.ordersCollection).add(order.toMap());
+              return ref.id;
+            }
+
+            Future<void> updateOrderStatus(String orderId, OrderStatus status, {String? paymentRef}) {
+              final data = <String, dynamic>{'status': status.name};
+              if (paymentRef != null) data['paymentRef'] = paymentRef;
+              return _db.collection(AppConstants.ordersCollection).doc(orderId).update(data);
+            }
+
+            Stream<List<OrderModel>> streamBuyerOrders(String buyerId) {
+              return _db
+                  .collection(AppConstants.ordersCollection)
+                  .where('buyerId', isEqualTo: buyerId)
+                  .snapshots()
+                  .map((snap) {
+                var items = snap.docs.map((d) => OrderModel.fromDoc(d)).toList();
+                items.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+                return items;
+              });
+            }
+
+            Stream<List<OrderModel>> streamFarmerOrders(String farmerId) {
+              return _db
+                  .collection(AppConstants.ordersCollection)
+                  .where('farmerId', isEqualTo: farmerId)
+                  .snapshots()
+                  .map((snap) {
+                var items = snap.docs.map((d) => OrderModel.fromDoc(d)).toList();
+                items.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+                return items;
+              });
+            }
+
+            Stream<List<OrderModel>> streamPendingLeadsForFarmer(String farmerId) {
+              return _db
+                  .collection(AppConstants.ordersCollection)
+                  .where('farmerId', isEqualTo: farmerId)
+                  .where('status', isEqualTo: OrderStatus.pending.name)
+                  .snapshots()
+                  .map((snap) {
+                var items = snap.docs.map((d) => OrderModel.fromDoc(d)).toList();
+                items.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+                return items;
+              });
+            }
+
+            Future<String> createBooking(BookingModel booking) async {
+              final ref = await _db.collection(AppConstants.bookingsCollection).add(booking.toMap());
+              return ref.id;
+            }
+
+            Stream<List<BookingModel>> streamAvailableBookings() {
+              return _db
+                  .collection(AppConstants.bookingsCollection)
+                  .where('status', isEqualTo: BookingStatus.requested.name)
+                  .snapshots()
+                  .map((snap) {
+                var items = snap.docs.map((d) => BookingModel.fromDoc(d)).toList();
+                items.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+                return items;
+              });
+            }
+
+            Stream<List<BookingModel>> streamDriverTrips(String driverId) {
+              return _db
+                  .collection(AppConstants.bookingsCollection)
+                  .where('driverId', isEqualTo: driverId)
+                  .snapshots()
+                  .map((snap) {
+                var items = snap.docs.map((d) => BookingModel.fromDoc(d)).toList();
+                items.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+                return items;
+              });
+            }
+
+            Stream<List<BookingModel>> streamRequesterBookings(String requesterId) {
+              return _db
+                  .collection(AppConstants.bookingsCollection)
+                  .where('requesterId', isEqualTo: requesterId)
+                  .snapshots()
+                  .map((snap) {
+                var items = snap.docs.map((d) => BookingModel.fromDoc(d)).toList();
+                items.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+                return items;
+              });
+            }
+
+            Stream<BookingModel?> streamBooking(String bookingId) {
+              return _db.collection(AppConstants.bookingsCollection).doc(bookingId).snapshots().map(
+                    (doc) => doc.exists ? BookingModel.fromDoc(doc) : null,
+                  );
+            }
+
+            Future<bool> acceptBooking({
+              required String bookingId,
+              required String driverId,
+              required String driverName,
+            }) {
+              final ref = _db.collection(AppConstants.bookingsCollection).doc(bookingId);
+              return _db.runTransaction<bool>((tx) async {
+                final snap = await tx.get(ref);
+                if (!snap.exists) return false;
+                final currentStatus = snap.data()?['status'];
+                if (currentStatus != BookingStatus.requested.name) return false;
+                tx.update(ref, {
+                  'status': BookingStatus.accepted.name,
+                  'driverId': driverId,
+                  'driverName': driverName,
+                });
+                return true;
+              });
+            }
+
+            Future<void> updateBookingStatus(String bookingId, BookingStatus status) {
+              return _db.collection(AppConstants.bookingsCollection).doc(bookingId).update({'status': status.name});
+            }
+
+            Future<void> updateDriverLocation(String driverId, double lat, double lng) {
+              return _db.collection(AppConstants.driverLocationsCollection).doc(driverId).set({
+                'lat': lat,
+                'lng': lng,
+                'timestamp': FieldValue.serverTimestamp(),
+              });
+            }
+
+            Stream<DocumentSnapshot<Map<String, dynamic>>> streamDriverLocation(String driverId) {
+              return _db.collection(AppConstants.driverLocationsCollection).doc(driverId).snapshots();
+            }
+          }
+          EOF
       - name: Add timeout and error visibility to auth
         run: |
           cat > silolink_app/lib/providers/auth_provider.dart << 'EOF'
